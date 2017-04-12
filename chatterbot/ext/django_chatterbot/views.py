@@ -2,6 +2,7 @@
 Modified as a free demo for trakerr.
 """
 
+import datetime
 import json
 import string
 
@@ -12,6 +13,7 @@ from chatterbot import ChatBot
 from chatterbot.ext.django_chatterbot import settings
 
 from trakerr import TrakerrClient
+from trakerr_client.models import CustomData, CustomStringData, CustomDoubleData
 
 class ChatterBotViewMixin(object):
     """
@@ -66,54 +68,157 @@ class ChatterBotView(ChatterBotViewMixin, View):
         """
         Return a response to the statement in the posted data.
         """
+        a = datetime.datetime.now()
         input_data = json.loads(request.read().decode('utf-8'))
 
         self.validate(input_data)
 
         chat_session = self.get_chat_session(request)
 
-        client = TrakerrClient("b2f59d0778004e503ddf685382297a741205333295736")
+        client = TrakerrClient("05bb07736fdaed2788d5bb123373381f21869593598803")
 
-        value = str(input_data)
+        value = input_data["text"]
         value = value.lower()
-        value = value.translate(None, string.punctuation)
+        translate_table = [ord(unicode(c)) for c in string.punctuation]
+        value = value.translate(translate_table)
         keyword = ["tylenol", "drugs", "prescription", "marajuana", "smoke"]
         session_id = request.session.session_key
+        browser_name = request.user_agent.browser.family
+        browser_version = request.user_agent.browser.version_string
+
+        sweets = ["sugar", "candy", "chocolate", "dessert", "cookies"]
+        snacks = ["pretzel", "crackers", "cookies"]
 
         if session_id is None:
-            request.session.Create()
+            request.session.create()
             session_id = request.session.session_key
 
-        print len(session_id)
+        medicine_seg = None
+        sweet_seg = None
+        snacks_seg = None
 
-        if any(x in value for x in keyword):
-            client.log({"user":"test@trakker.io", "session":session_id,
-                        "errname":"user asked a protected question",
-                        "errmessage":"User teaching my robot bad things"},
-                       "Warning", "input", False)
-
-        if "make error" in value:
+        if self._words_in_string(sweets, value):
             try:
-                self._some_method()
-            except ArithmeticError:
-                client.log({"user":"test@trakker.io", "session":session_id}, "error")
+                #gets a random word that was found in the string.
+                sweet_seg = self._words_in_string(sweets, value).pop()
+                #sweet_seg = "sweets"
+            except KeyError:
+                pass
+
+        if self._words_in_string(snacks, value):
+            try:
+                snacks_seg = self._words_in_string(snacks, value).pop()
+                #snacks_seg = "snacks"
+            except KeyError:
+                pass
+
+        if self._words_in_string(keyword, value):
+            try:
+                medicine_seg = self._words_in_string(keyword, value).pop()
+                #medicine_seg = "medicine"
+            except KeyError:
+                pass
+
+            event = client.create_new_app_event("warning", "User Input",
+                                                "User asked a protected question",
+                                                "User teaching my robot bad things")
+            event.event_user = "test@trakker.io"
+            event.event_session = session_id
+            event.context_app_browser = browser_name
+            event.context_app_browser_version = browser_version
+
+            event.custom_properties = CustomData(CustomStringData(value), CustomDoubleData(self._timer(a)))
+            event.custom_segments = CustomData(CustomStringData())
+
+            if medicine_seg is not None:
+                event.custom_segments.string_data.custom_data3 = medicine_seg
+
+            if sweet_seg is not None:
+                event.custom_segments.string_data.custom_data1 = sweet_seg
+
+            if snacks_seg is not None:
+                event.custom_segments.string_data.custom_data2 = snacks_seg
+            client.send_event_async(event)
 
         if "make fatal" in value:
             try:
                 self._some_method()
             except ArithmeticError:
-                client.log({"user":"test@trakker.io", "session":session_id}, "fatal")
+                event = client.create_new_app_event("fatal", exc_info=True)
+                event.event_user = "test@trakker.io"
+                event.event_session = session_id
+                event.context_app_browser = browser_name
+                event.context_app_browser_version = browser_version
+
+                event.custom_properties = CustomData(CustomStringData(value), CustomDoubleData(self._timer(a)))
+                event.custom_segments = CustomData(CustomStringData())
+
+                if sweet_seg is not None:
+                    event.custom_segments.string_data.custom_data1 = sweet_seg
+
+                if snacks_seg is not None:
+                    event.custom_segments.string_data.custom_data2 = snacks_seg
+
+                client.send_event_async(event)
+
+        if "make error" in value:
+            try:
+                self._some_method()
+            except ArithmeticError:
+                event = client.create_new_app_event("error", exc_info=True)
+                event.event_user = "test@trakker.io"
+                event.event_session = session_id
+                event.context_app_browser = browser_name
+                event.context_app_browser_version = browser_version
+
+                event.custom_properties = CustomData(CustomStringData(value), CustomDoubleData(self._timer(a)))
+                event.custom_segments = CustomData(CustomStringData())
+
+                if sweet_seg is not None:
+                    event.custom_segments.string_data.custom_data1 = sweet_seg
+
+                if snacks_seg is not None:
+                    event.custom_segments.string_data.custom_data2 = snacks_seg
+
+                client.send_event_async(event)
 
         if "make info" in value:
-            client.log({"user":"test@trakker.io", "session":session_id,
-                        "errname":"chatbot info", "errmessage":"Chatbot made an info for you!"},
-                       "info")
+            event = client.create_new_app_event("info", "info here!",
+                                                "Chatbot info", "Chatbot made an info for you!")
+            event.event_user = "test@trakker.io"
+            event.event_session = session_id
+            event.context_app_browser = browser_name
+            event.context_app_browser_version = browser_version
+
+            event.custom_properties = CustomData(CustomStringData(value), CustomDoubleData(self._timer(a)))
+            event.custom_segments = CustomData(CustomStringData())
+
+            if sweet_seg is not None:
+                event.custom_segments.string_data.custom_data1 = sweet_seg
+
+            if snacks_seg is not None:
+                event.custom_segments.string_data.custom_data2 = snacks_seg
+            client.send_event_async(event)
 
         if "make debug" in value:
-            client.log({"user":"test@trakker.io", "session":session_id,
-                        "errname":"chatbot debug",
-                        "errmessage":"Chatbot sometimes helps you debug!"},
-                       "debug")
+            event = client.create_new_app_event("debug", "Debug statement!",
+                                                "Chatbot debug",
+                                                "Chatbot sometimes helps you debug!")
+            event.event_user = "test@trakker.io"
+            event.event_session = session_id
+            event.context_app_browser = browser_name
+            event.context_app_browser_version = browser_version
+
+            event.custom_properties = CustomData(CustomStringData(value), CustomDoubleData(self._timer(a)))
+            event.custom_segments = CustomData(CustomStringData())
+
+            if sweet_seg is not None:
+                event.custom_segments.string_data.custom_data1 = sweet_seg
+
+            if snacks_seg is not None:
+                event.custom_segments.string_data.custom_data2 = snacks_seg
+
+            client.send_event_async(event)
 
         response = self.chatterbot.get_response(input_data, chat_session.id_string)
         response_data = response.serialize()
@@ -156,6 +261,20 @@ class ChatterBotView(ChatterBotViewMixin, View):
 
         # Return a method not allowed response
         return JsonResponse(data, status=405)
+
+    def _timer(self, a):
+        """
+        Takes a datetime and returns a timedelta from now in miliseconds
+        """
+        return int((datetime.datetime.now() - a).total_seconds() * 1000)
+
+    def _words_in_string(self, word_list, a_string):
+        """
+        Takes a string and a list of words and conversts both into a set before finding the intersection.
+        :returns: A set of words from the list that were found in the string. test the method to see true false,
+        but the set also lets you get the words found in the string.
+        """
+        return set(word_list).intersection(a_string.split())
 
 
     def _some_method(self):
